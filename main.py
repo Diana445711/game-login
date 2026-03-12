@@ -1,93 +1,112 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from fastapi.middleware.cors import CORSMiddleware
-import os
-
-app = FastAPI()
+from fastapi import FastAPI 
+from pydantic import BaseModel 
+import sqlite3 
+from fastapi.middleware.cors import CORSMiddleware 
+import os 
 
 
-# Allow Unity / WebGL access
+app = FastAPI() 
+ 
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # for testing only, will be replaced with URL after itch.io
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Allow Unity / WebGL to access the backend 
 
+app.add_middleware( 
+    CORSMiddleware, 
+    allow_origins=["*"],  # for testing only; replace with your site URL in production 
+    allow_methods=["*"], 
+    allow_headers=["*"], 
+) 
 
-# Request model
+ 
+# Request model 
 
-class User(BaseModel):
-    username: str
-    password: str
+class User(BaseModel): 
+    username: str 
+    password: str 
 
+ 
 
-# Connect to Postgres
-
-DATABASE_URL = os.getenv("DATABASE_URL")  # Set automatically by Render
-
-conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
-cursor = conn.cursor()
-
-
-# Create users table if it doesn't exist
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    username TEXT PRIMARY KEY,
-    password TEXT NOT NULL
-)
-""")
-conn.commit()
+# Setup SQLite database 
 
 
-# Register endpoint
+DB_PATH = os.path.join(os.getcwd(), "users.db")  # Render will create this automatically 
 
-@app.post("/register")
-def register(user: User):
-    username = user.username.strip()
-    password = user.password.strip()
+conn = sqlite3.connect(DB_PATH, check_same_thread=False) 
 
-    print(f"Register attempt: {repr(username)}, {repr(password)}")
+cursor = conn.cursor() 
 
-    cursor.execute("SELECT * FROM users WHERE username=%s", (username,))
-    if cursor.fetchone():
-        print("Username already exists in DB")
-        return {"status": "username_taken"}
+cursor.execute(""" 
 
-    cursor.execute(
-        "INSERT INTO users (username, password) VALUES (%s, %s)",
-        (username, password)
-    )
-    conn.commit()
-    print("Account successfully created")
-    return {"status": "account_created"}
+CREATE TABLE IF NOT EXISTS users ( 
+    username TEXT PRIMARY KEY, 
+    password TEXT NOT NULL 
+) 
+
+""") 
+
+conn.commit() 
 
 
-# Login endpoint
-
-@app.post("/login")
-def login(user: User):
-    username = user.username.strip()
-    password = user.password.strip()
-
-    cursor.execute(
-        "SELECT * FROM users WHERE username=%s AND password=%s",
-        (username, password)
-    )
-    if cursor.fetchone():
-        print("Login successful")
-        return {"status": "success"}
-
-    print("Login failed")
-    return {"status": "invalid"}
+# Register endpoint 
 
 
-# root endpoint to check service
+@app.post("/register") 
 
-@app.get("/")
-def root():
-    return {"message": "Backend is running!"}
+def register(user: User): 
+
+    username = user.username.strip() 
+    password = user.password.strip() 
+ 
+
+    print(f"Register attempt: {repr(username)}, {repr(password)}") 
+
+
+    if not username or not password: 
+        return {"status": "empty_fields"} 
+
+ 
+
+    cursor.execute("SELECT * FROM users WHERE username=?", (username,)) 
+
+    if cursor.fetchone(): 
+        print("Username already exists in DB") 
+        return {"status": "username_taken"} 
+
+
+    cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password)) 
+
+    conn.commit() 
+
+    print("Account successfully created") 
+
+    return {"status": "account_created"} 
+
+
+
+# Login endpoint 
+
+
+@app.post("/login") 
+
+def login(user: User): 
+
+    username = user.username.strip() 
+    password = user.password.strip() 
+
+
+    if not username or not password: 
+        return {"status": "empty_fields"} 
+
+ 
+
+    cursor.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password)) 
+
+    if cursor.fetchone(): 
+        print("Login successful") 
+        return {"status": "success"} 
+
+ 
+
+    print("Login failed") 
+
+    return {"status": "invalid"} 
