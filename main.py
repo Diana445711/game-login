@@ -25,6 +25,9 @@ class User(BaseModel):
     password: str 
 
  
+class GameResult(BaseModel):
+    username: str
+    result: str   # "win" or "loss"
 
 # Setup SQLite database 
 
@@ -35,6 +38,7 @@ conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 
 cursor = conn.cursor() 
 
+# Users Table
 cursor.execute(""" 
 
 CREATE TABLE IF NOT EXISTS users ( 
@@ -43,6 +47,17 @@ CREATE TABLE IF NOT EXISTS users (
 ) 
 
 """) 
+
+# Game Results Table
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS game_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT,
+    result TEXT,
+    played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(username) REFERENCES users(username)
+)
+""")
 
 conn.commit() 
 
@@ -110,3 +125,54 @@ def login(user: User):
     print("Login failed") 
 
     return {"status": "invalid"} 
+
+
+
+# Save Game Result endpoint
+
+
+@app.post("/save_results")
+def save_results(data: GameResult):
+
+    username = data.username.strip()
+    result = data.result.strip().lower()
+
+    if result not in ["win", "loss"]:
+        return {"status": "invalid_result"}
+
+    cursor.execute(
+        "INSERT INTO game_results (username, result) VALUES (?, ?)",
+        (username, result)
+    )
+
+    conn.commit()
+
+    print(f"Saved result: {username} -> {result}")
+
+    return {"status": "saved"}
+
+
+
+# Show Player Stats
+
+
+@app.post("/stats/{username}")
+def get_stats(username: str):
+    
+    cursor.execute(
+        "SELECT COUNT(*) FROM game_results WHERE username=? AND result='win'",
+        (username,)
+    )
+    wins = cursor.fetchone()[0]
+
+    cursor.execute(
+        "SELECT COUNT(*) FROM game_results WHERE username=? AND result='loss'",
+        (username,)
+    )
+    losses = cursor.fetchone()[0]
+
+    return {
+        "username": username,
+        "wins": wins,
+        "losses": losses
+    }
