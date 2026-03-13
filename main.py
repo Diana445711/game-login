@@ -158,7 +158,6 @@ def save_results(data: GameResult):
 
 @app.get("/stats/{username}")
 def get_stats(username: str):
-
     cursor.execute(
         "SELECT COUNT(*) FROM game_results WHERE username=? AND result='win'",
         (username,)
