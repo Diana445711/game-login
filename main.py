@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorClient
 from fastapi.middleware.cors import CORSMiddleware 
 import os 
+import bcrypt
 
 
 app = FastAPI() 
@@ -19,7 +20,7 @@ results_collection = db["game_results"]
 
 app.add_middleware( 
     CORSMiddleware, 
-    allow_origins=["*"],  # for testing only; replace with your site URL in production 
+    allow_origins=["*"],  # for testing only; replace with site URL when doing Itch.io stuff
     allow_methods=["*"], 
     allow_headers=["*"], 
 ) 
@@ -55,10 +56,13 @@ async def register(user: User):
 
     if existing_user:
         return {"status": "username_taken"}
+    
+    # Hash password before storing
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
 
     await users_collection.insert_one({
         "username": username,
-        "password": password
+        "password": hashed_password.decode('utf-8')
     })
 
     return {"status": "account_created"}
@@ -78,13 +82,11 @@ async def login(user: User):
     if not username or not password: 
         return {"status": "empty_fields"} 
 
-    existing_user = await users_collection.find_one({
-            "username": username,
-            "password": password
-        })
-
+    existing_user = await users_collection.find_one({"username": username})
     if existing_user:
-        return {"status": "success"}
+        stored_password = existing_user["password"].encode('utf-8')
+        if bcrypt.checkpw(password.encode('utf-8'), stored_password):
+            return {"status": "success"}
 
     return {"status": "invalid"}
 
